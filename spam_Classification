@@ -1,0 +1,188 @@
+library(SnowballC)
+library(wordcloud)
+library(RColorBrewer) 
+library(e1071)         #For Naive Bayes
+library(caret)
+library(tm)
+library(ggplot2)
+
+
+# Step 1 : Collecting the Data
+setwd("C:/Users/Mon/Desktop/DataScience")
+sms_raw <- read.csv("spam.csv", stringsAsFactors = FALSE)
+
+#Step 2 : Exploring and preparing the data
+View(sms_raw)
+
+
+
+
+#Clean up the dataframe 
+sms_raw<-sms_raw[,1:2]
+names(sms_raw)<-c("Label","Text")
+View(sms_raw)
+
+#Check the Data to see if there are missing Values
+length(which(!complete.cases(sms_raw)))
+
+#Convert our Class label into a factor
+sms_raw$Label <- as.factor(sms_raw$Label)
+
+##=> SPAM PLOT
+plot(sms_raw$Label,main="",xlab ="Spam & Ham",ylab = "Text" ,colors=FALSE)
+
+
+#Length of Each Message
+sms_raw$TextLength<-nchar(sms_raw$Text)
+summary(sms_raw$TextLength)
+View(sms_raw)
+
+
+
+
+#Visualize distribution with ggplot2,Addeing segmentation for ham/spam
+library(ggplot2)
+ggplot(sms_raw,aes(x=TextLength,fill=Label))+
+  theme_bw()+
+  geom_histogram(binwidth = 5)+
+  labs(y="Text Count",x="Length of Text",title="Text Length of Class Labels")
+
+#To avoid un-necessary problem --My Idea
+
+sms_raw<-sms_raw[,1:2]
+
+str(sms_raw)
+
+table(sms_raw$Label)
+
+prop.table(table(sms_raw$Label))
+
+##Frequent word show in graphically respectively HAM & SPAM
+library(RColorBrewer)
+library(wordcloud)
+ 
+spam <- subset(sms_raw, Label == "spam")
+wordcloud(spam$Text, max.words = 60, colors = brewer.pal(7, "Paired"), random.order = FALSE)
+
+ham <- subset(sms_raw, Label == "ham")
+wordcloud(ham$Text, max.words = 60, colors = brewer.pal(7, "Paired"), random.order = FALSE)
+
+
+
+# Data preparation : cleaning and standardizing the data
+
+install.packages("tm")
+
+library(tm)
+
+
+sms_corpus <- VCorpus(VectorSource(sms_raw$Text))
+
+View(sms_corpus)
+# Transforming the corpus : to lowercase
+
+sms_corpus_clean <- tm_map(sms_corpus, content_transformer(tolower))
+
+# Transforming the corpus : remove the nummbers
+
+sms_corpus_clean <- tm_map(sms_corpus_clean, removeNumbers)
+
+# Transforming the corpus : remove the stop words
+
+sms_corpus_clean <- tm_map(sms_corpus_clean, removeWords, stopwords())
+
+# Transforming the corpus : remove the punctuation
+
+sms_corpus_clean <- tm_map(sms_corpus_clean, removePunctuation)
+
+##Show the 1st Data
+as.character(sms_corpus_clean[[111]])
+
+# To view multiple documents
+
+lapply(sms_corpus[2:4], as.character)
+
+
+# Transforming the corpus : Stemming
+
+install.packages("SnowballC")
+
+library(SnowballC)
+
+sms_corpus_clean <- tm_map(sms_corpus_clean, stemDocument)
+
+# Transforming the corpus : Remove white spaces
+
+sms_corpus_clean <- tm_map(sms_corpus_clean, stripWhitespace)
+
+# Splitting text documents into words using tokenization
+
+sms_dtm <- DocumentTermMatrix(sms_corpus_clean)
+
+View(sms_dtm)
+sms_dtm
+dim(sms_dtm)
+
+# Data Preparation: creating training and test datasets
+
+
+#Training set
+sms_dtm_train <- sms_dtm[1:4457, ]
+View(sms_dtm_train)
+
+#Test set
+sms_dtm_test <- sms_dtm[4458:5572, ]
+View(sms_dtm_test)
+
+#Training Label
+sms_dtm_train_labels <- sms_raw[1:4457, ]$Label
+
+#Test Label
+sms_dtm_test_labels <- sms_raw[4458:5572, ]$Label
+
+#Proportion for train labels
+prop.table(table(sms_dtm_train_labels))
+
+#Proportion for test labels
+prop.table(table(sms_dtm_test_labels))
+
+
+
+sms_freq_terms <- findFreqTerms(sms_dtm_train, 5)
+
+sms_dtm_freq_train <- sms_dtm_train[, sms_freq_terms]
+
+sms_dtm_freq_test <- sms_dtm_test[,sms_freq_terms]
+
+dim(sms_dtm_freq_train)
+convert_counts <- function(x) {
+  x <- ifelse(x>0 , "Yes", "No")
+  
+}
+
+sms_train <- apply(sms_dtm_freq_train, MARGIN = 2, convert_counts)
+
+sms_test <- apply(sms_dtm_freq_test, MARGIN = 2, convert_counts)
+
+
+# Step 3 : Training a model on the data
+
+install.packages("e1071")
+
+library(e1071)
+
+
+sms_classifier <- naiveBayes(sms_train, sms_dtm_train_labels, laplace = 1)
+
+sms_test_pred <- predict(sms_classifier, sms_test)
+
+
+
+
+
+##Confusion Matrix
+
+confusionMatrix(data = sms_test_pred, reference = sms_dtm_test_labels, positive = "spam", dnn = c("Prediction", "Actual"))
+
+
+
